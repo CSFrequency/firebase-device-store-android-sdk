@@ -27,13 +27,21 @@ import com.google.firebase.iid.FirebaseInstanceId;
 import com.google.firebase.iid.InstanceIdResult;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 public class FirebaseDeviceStore {
     private static final String DEFAULT_COLLECTION_PATH = "user-devices";
+    private static final String DEVICE_ID_FIELD = "deviceId";
+    private static final String DEVICES_FIELD = "devices";
+    private static final String FCM_TOKEN_FIELD = "fcmToken";
+    private static final String NAME_FIELD = "name";
+    private static final String OS_FIELD = "os";
     private static final String TAG = "FirebaseDeviceStore";
+    private static final String TYPE_FIELD = "type";
+    private static final String USER_ID_FIELD = "userId";
 
     private final FirebaseAuth auth;
     private final String collectionPath;
@@ -62,7 +70,7 @@ public class FirebaseDeviceStore {
 
     public void signOut() {
         if (currentUser != null && currentToken != null) {
-            deleteToken(currentUser.getUid(), currentToken);
+            deleteDevice(currentUser.getUid());
         }
 
         // Clear the cached user
@@ -92,7 +100,7 @@ public class FirebaseDeviceStore {
                     currentToken = task.getResult().getToken();
 
                     if (currentToken != null && currentUser != null) {
-                        addToken(currentUser.getUid(), currentToken);
+                        updateDevice(currentUser.getUid(), currentToken);
                     }
                 } else {
                     Log.w(TAG, "Failed to load FCM token", task.getException());
@@ -108,7 +116,7 @@ public class FirebaseDeviceStore {
                 if (authUser != null && currentUser == null && currentToken != null) {
                     currentUser = authUser;
 
-                    addToken(currentUser.getUid(), currentToken);
+                    updateDevice(currentUser.getUid(), currentToken);
                 } else if (authUser == null && currentUser != null) {
                     Log.w(TAG, "You need to call the `logout` method on the DeviceStore before logging out the user");
 
@@ -134,35 +142,7 @@ public class FirebaseDeviceStore {
         subscribed = false;
     }
 
-    private void addToken(final String userId, final String token) {
-        final DocumentReference docRef = userRef(userId);
-
-        firestore.runTransaction(new Transaction.Function<Void>() {
-           @Override
-           public Void apply(Transaction transaction) throws FirebaseFirestoreException {
-               DocumentSnapshot doc = transaction.get(docRef);
-
-               if (doc.exists()) {
-                   List<Map<String, String>> devices = getDevices(doc);
-                   // Add the new device if it doesn't already exist
-                   if (!containsDevice(devices, token)) {
-                       devices.add(createDevice(token));
-                   }
-                   // Update the document
-                   transaction.update(docRef, "devices", devices);
-               } else {
-                   Map<String, Object> data = new HashMap<>();
-                   data.put("devices", createDevice(token));
-                   data.put("userId", userId);
-
-                   transaction.set(docRef, data);
-               }
-               return null;
-           }
-        });
-    }
-
-    private void deleteToken(final String userId, final String token) {
+    private void deleteDevice(final String userId) {
         final DocumentReference docRef = userRef(userId);
 
         firestore.runTransaction(new Transaction.Function<Void>() {
@@ -173,22 +153,19 @@ public class FirebaseDeviceStore {
                 if (doc.exists()) {
                     List<Map<String, String>> devices = getDevices(doc);
                     // Remove the old device
-                    devices = removeDevice(devices, token);
+                    devices = removeCurrentDevice(devices);
                     // Update the document
-                    transaction.update(docRef, "devices", devices);
+                    transaction.update(docRef, DEVICES_FIELD, devices);
                 } else {
-                    Map<String, Object> data = new HashMap<>();
-                    data.put("devices", new ArrayList<>());
-                    data.put("userId", userId);
-
-                    transaction.set(docRef, data);
+                    Map<String, Object> userDevices = createUserDevices(userId, null);
+                    transaction.set(docRef, userDevices);
                 }
                 return null;
             }
         });
     }
 
-    private void updateToken(final String userId, final String oldToken, final String newToken) {
+    private void updateDevice(final String userId, final String token) {
         final DocumentReference docRef = userRef(userId);
 
         firestore.runTransaction(new Transaction.Function<Void>() {
@@ -198,54 +175,51 @@ public class FirebaseDeviceStore {
 
                 if (doc.exists()) {
                     List<Map<String, String>> devices = getDevices(doc);
-                    // Remove the old device
-                    if (oldToken != null) {
-                        devices = removeDevice(devices, oldToken);
-                    }
-                    // Add the new device if it doesn't already exist
-                    if (newToken != null) {
-                        if (!containsDevice(devices, newToken)) {
-                            devices.add(createDevice(newToken));
-                        }
+                    if (containsCurrentDevice(devices)) {
+                        // Update the device token if it already exists
+                        updateCurrentDevice(devices, token);
+                    } else {
+                        // Add the device if it doesn't already exist
+                        devices.add(createCurrentDevice(token));
                     }
                     // Update the document
-                    transaction.update(docRef, "devices", devices);
-                } else if (newToken != null) {
-                    Map<String, Object> data = new HashMap<>();
-                    data.put("devices", createDevice(newToken));
-                    data.put("userId", userId);
-
-                    transaction.set(docRef, data);
+                    transaction.update(docRef, DEVICES_FIELD, devices);
                 } else {
-                    Map<String, Object> data = new HashMap<>();
-                    data.put("devices", new ArrayList<>());
-                    data.put("userId", userId);
-
-                    transaction.set(docRef, data);
+                    Map<String, Object> userDevices = createUserDevices(userId, token);
+                    transaction.set(docRef, userDevices);
                 }
                 return null;
             }
         });
     }
 
-    private boolean containsDevice(List<Map<String, String>> devices, String token) {
+    private boolean containsCurrentDevice(List<Map<String, String>> devices) {
+        String deviceId = getDeviceId();
         for (Map<String, String> device : devices) {
-            if (token.equals(device.get("fcmToken"))) {
+            if (deviceId.equals(device.get(DEVICE_ID_FIELD))) {
                 return true;
             }
         }
         return false;
     }
 
-    private Map<String, String> createDevice(String token) {
+    private Map<String, String> createCurrentDevice(String token) {
         Map<String, String> device = new HashMap<>();
-        device.put("deviceId", getDeviceId());
-        device.put("fcmToken", token);
-        device.put("name", getDeviceName());
-        device.put("os", getOS());
-        device.put("type", "Android");
+        device.put(DEVICE_ID_FIELD, getDeviceId());
+        device.put(FCM_TOKEN_FIELD, token);
+        device.put(NAME_FIELD, getDeviceName());
+        device.put(OS_FIELD, getOS());
+        device.put(TYPE_FIELD, "Android");
 
         return device;
+    }
+
+    private Map<String, Object> createUserDevices(String userId, String token) {
+        Map<String, Object> userDevices = new HashMap<>();
+        userDevices.put(DEVICES_FIELD, token == null ? Arrays.asList() : Arrays.asList(createCurrentDevice(token)));
+        userDevices.put(USER_ID_FIELD, userId);
+
+        return userDevices;
     }
 
     private String getDeviceId() {
@@ -253,7 +227,7 @@ public class FirebaseDeviceStore {
     }
 
     private List<Map<String, String>> getDevices(DocumentSnapshot snapshot) {
-        List<Map<String, String>> devices = (List<Map<String, String>>) snapshot.get("devices");
+        List<Map<String, String>> devices = (List<Map<String, String>>) snapshot.get(DEVICES_FIELD);
         if (devices == null) {
             return new ArrayList<>();
         }
@@ -280,14 +254,24 @@ public class FirebaseDeviceStore {
         return "Android " + Build.VERSION.RELEASE;
     }
 
-    private List<Map<String, String>> removeDevice(List<Map<String, String>> devices, String token) {
+    private List<Map<String, String>> removeCurrentDevice(List<Map<String, String>> devices) {
+        String deviceId = getDeviceId();
         List<Map<String, String>> filteredDevices = new ArrayList<>();
         for (Map<String, String> device : devices) {
-            if (!token.equals(device.get("fcmToken"))) {
+            if (!deviceId.equals(device.get(DEVICE_ID_FIELD))) {
                 filteredDevices.add(device);
             }
         }
         return filteredDevices;
+    }
+
+    private void updateCurrentDevice(List<Map<String, String>> devices, String token) {
+        String deviceId = getDeviceId();
+        for (Map<String, String> device : devices) {
+            if (deviceId.equals(device.get(DEVICE_ID_FIELD))) {
+                device.put(FCM_TOKEN_FIELD, token);
+            }
+        }
     }
 
     private DocumentReference userRef(String userId) {
@@ -305,7 +289,7 @@ public class FirebaseDeviceStore {
             String token = intent.getStringExtra(FDSMessagingService.TOKEN_EXTRA);
             // If the token has changed, then update it
             if ((token == null && currentToken != null || !token.equals(currentToken)) && currentUser != null) {
-                updateToken(currentUser.getUid(), currentToken, token);
+                updateDevice(currentUser.getUid(), token);
             }
             // Update the cached token
             currentToken = token;
