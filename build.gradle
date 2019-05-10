@@ -1,4 +1,6 @@
 apply plugin: 'com.android.library'
+apply plugin: 'com.github.dcendents.android-maven'
+apply plugin: 'com.jfrog.bintray'
 
 buildscript {
     repositories {
@@ -7,6 +9,8 @@ buildscript {
     }
     dependencies {
         classpath 'com.android.tools.build:gradle:3.4.0'
+        classpath 'com.github.dcendents:android-maven-gradle-plugin:2.1'
+        classpath 'com.jfrog.bintray.gradle:gradle-bintray-plugin:1.8.4'
     }
 }
 
@@ -44,4 +48,85 @@ dependencies {
     implementation 'com.google.firebase:firebase-auth:17.0.0'
     implementation 'com.google.firebase:firebase-firestore:19.0.0'
     implementation 'com.google.firebase:firebase-messaging:18.0.0'
+}
+
+ext {
+    publishedGroupId = 'com.csfrequency.firebase.devicestore'
+
+    libraryDescription = 'Automatically store Device and FCM Token information for Firebase Auth Users in Cloud Firestore.'
+
+    siteUrl = 'https://github.com/csfrequency/firebase-device-store-android-sdk'
+    gitUrl = 'https://github.com/csfrequency/firebase-device-store-android-sdk.git'
+}
+
+group = publishedGroupId
+version = '0.0.3'
+
+install {
+    repositories.mavenInstaller {
+        pom.project {
+            packaging 'aar'
+            groupId publishedGroupId
+            artifactId 'firebase-device-store'
+
+            name 'FirebaseDeviceStore'
+            description libraryDescription
+            url siteUrl
+
+            licenses {
+                license {
+                    name 'The Apache Software License, Version 2.0'
+                    url 'http://www.apache.org/licenses/LICENSE-2.0.txt'
+                }
+            }
+            developers {
+                developer {
+                    id 'chrisbianca'
+                    name 'Chris Bianca'
+                    email 'chris@csfrequency.com'
+                }
+            }
+            scm {
+                connection gitUrl
+                developerConnection gitUrl
+                url siteUrl
+            }
+        }
+    }
+}
+
+task sourcesJar(type: Jar) {
+    classifier = 'sources'
+    from android.sourceSets.main.java.srcDirs
+}
+
+artifacts {
+    archives sourcesJar
+}
+
+Properties properties = new Properties()
+properties.load(project.rootProject.file('local.properties').newDataInputStream())
+
+bintray {
+    user = properties.getProperty("bintray.user")
+    key = properties.getProperty("bintray.apikey")
+
+    configurations = ['archives']
+    pkg {
+        repo = 'maven'
+        name = 'firebase-device-store-android-sdk'
+        userOrg = 'csfrequency'
+
+        desc = libraryDescription
+        // websiteUrl = siteUrl
+        // vcsUrl = gitUrl
+        licenses = ["Apache-2.0"]
+        dryRun = false
+        publish = true
+        override = false
+        publicDownloadNumbers = true
+        version {
+            desc = libraryDescription
+        }
+    }
 }
