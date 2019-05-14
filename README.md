@@ -2,7 +2,7 @@
 
 Automatically store Device and FCM Token information for Firebase Auth Users in Cloud Firestore.
 
-[![Download](https://api.bintray.com/packages/csfrequency/maven/firebase-device-store-android-sdk/images/download.svg) ](https://bintray.com/csfrequency/maven/firebase-device-store-android-sdk/_latestVersion))
+[![Download](https://api.bintray.com/packages/csfrequency/maven/firebase-device-store-android-sdk/images/download.svg) ](https://bintray.com/csfrequency/maven/firebase-device-store-android-sdk/_latestVersion)
 
 > This library is a proof of concept, and very much a work in progress.
 
@@ -85,8 +85,8 @@ Create a new DeviceStore.
 Parameters:
 
 - `context`: `Context` the application context
-- `app`: `FirebaseApp` for the Firebase App to use
-- `collectionPath`: (Optional) `string` to specify the Cloud Firestore collection where devices should be stored. Defaults to `user-devices`.
+- `app`: `FirebaseApp` the Firebase App to use
+- `collectionPath`: (Optional) `string` the Cloud Firestore collection where devices should be stored. Defaults to `user-devices`.
 
 Returns a `FirebaseDeviceStore`.
 
