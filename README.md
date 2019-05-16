@@ -10,6 +10,7 @@ Automatically store Device and FCM Token information for Firebase Auth Users in 
 
 Update the root level `build.gradle` with the CS Frequency Maven repository:
 
+// TODO: Add period at end of sentence
 > This will not be necessary once the library has been accepted into JCenter
 
 ```
@@ -34,6 +35,7 @@ implementation "com.csfrequency.firebase.devicestore:firebase-device-store:0.0.3
 
 ## Example usage
 
+// TODO: Indent this source code snippet
 ```
 import com.csfrequency.firebase.devicestore.FirebaseDeviceStore;
 
@@ -70,6 +72,7 @@ A `Device` object contains the following:
 {
   deviceId: string, // The browser name and version
   fcmToken: string, // The FCM token
+// TODO: s/browser's/browsers
   name: 'Unknown',  // Web browser's do not provide a name field
   os: string,       // The OS of the device
   type: 'Web'
@@ -78,6 +81,7 @@ A `Device` object contains the following:
 
 ### API
 
+// TODO: Add argument types
 #### `FirebaseDeviceStore(context, app, collectionPath)`
 
 Create a new DeviceStore.
@@ -94,6 +98,7 @@ Returns a `FirebaseDeviceStore`.
 
 Indicate to the DeviceStore that the user is about to sign out, and the current device token should be removed.
 
+// TODO: Split into two or more sentences
 This cannot be done automatically with `onAuthStateChanged` as the user won't have permission to remove the token from Firestore as they are already signed out by this point and the Cloud Firestore security rules will prevent the database deletion.
 
 #### `FirebaseDeviceStore.subscribe(): void`

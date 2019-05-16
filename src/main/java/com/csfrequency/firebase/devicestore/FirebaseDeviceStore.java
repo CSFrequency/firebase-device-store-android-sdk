@@ -111,6 +111,11 @@ public class FirebaseDeviceStore {
         authStateListener = new FirebaseAuth.AuthStateListener() {
             @Override
             public void onAuthStateChanged(@NonNull FirebaseAuth firebaseAuth) {
+
+                // TODO: Are we guranteed that this callback fires before the InstanceId listener
+                // above fires? If the instance ID fires before we assign the currentUserm then we
+                // will never set the token.
+
                 FirebaseUser authUser = firebaseAuth.getCurrentUser();
 
                 if (authUser != null && currentUser == null && currentToken != null) {
@@ -123,6 +128,9 @@ public class FirebaseDeviceStore {
                     // Clear the cached user
                     currentUser = authUser;
                 }
+
+                // TODO: Is authUser.equals(currentUser) always true at this point? Would it make
+                // sense to add an assert?
 
             }
         };
@@ -145,11 +153,15 @@ public class FirebaseDeviceStore {
     private void deleteDevice(final String userId) {
         final DocumentReference docRef = userRef(userId);
 
+        // TODO: This code might never have a chance to run if a user calls "signOut" and then
+        // exists out of the client. If this cleanup is required, then signOut() will have to return
+        // a Task.
         firestore.runTransaction(new Transaction.Function<Void>() {
             @Override
             public Void apply(Transaction transaction) throws FirebaseFirestoreException {
                 DocumentSnapshot doc = transaction.get(docRef);
 
+                // TODO: Would it be possible to achieve the same with FieldValue.arrayRemove()?
                 if (doc.exists()) {
                     List<Map<String, String>> devices = getDevices(doc);
                     // Remove the old device
@@ -157,6 +169,8 @@ public class FirebaseDeviceStore {
                     // Update the document
                     transaction.update(docRef, DEVICES_FIELD, devices);
                 } else {
+                    // TODO: Is it necessary to create this empty list if the document does not
+                    // already exist?
                     Map<String, Object> userDevices = createUserDevices(userId, null);
                     transaction.set(docRef, userDevices);
                 }
@@ -168,11 +182,14 @@ public class FirebaseDeviceStore {
     private void updateDevice(final String userId, final String token) {
         final DocumentReference docRef = userRef(userId);
 
+        // TODO: Same as above - this should return a Task and the callee should wait for it to
+        // succeed.
         firestore.runTransaction(new Transaction.Function<Void>() {
             @Override
             public Void apply(Transaction transaction) throws FirebaseFirestoreException {
                 DocumentSnapshot doc = transaction.get(docRef);
 
+                // TODO: Explore replacing this with FieldValue.arrayUnion()
                 if (doc.exists()) {
                     List<Map<String, String>> devices = getDevices(doc);
                     if (containsCurrentDevice(devices)) {
@@ -235,6 +252,7 @@ public class FirebaseDeviceStore {
     }
 
     private String getDeviceName() {
+        // TODO: Move this to a class level constant.
         String permission = "android.permission.BLUETOOTH";
         int res = context.checkCallingOrSelfPermission(permission);
         if (res == PackageManager.PERMISSION_GRANTED) {
@@ -256,6 +274,7 @@ public class FirebaseDeviceStore {
 
     private List<Map<String, String>> removeCurrentDevice(List<Map<String, String>> devices) {
         String deviceId = getDeviceId();
+        // TODO: Maybe initialize with initialCapacity of devices.size() - 1
         List<Map<String, String>> filteredDevices = new ArrayList<>();
         for (Map<String, String> device : devices) {
             if (!deviceId.equals(device.get(DEVICE_ID_FIELD))) {
@@ -275,6 +294,7 @@ public class FirebaseDeviceStore {
     }
 
     private DocumentReference userRef(String userId) {
+        // TODO: Add Preconditions to verify that the userId is not-null
         return firestore.collection(collectionPath).document(userId);
     }
 
@@ -288,6 +308,8 @@ public class FirebaseDeviceStore {
 
             String token = intent.getStringExtra(FDSMessagingService.TOKEN_EXTRA);
             // If the token has changed, then update it
+            // TODO: Try to simiplify this statement, maybe by pulling out the currentUser check.
+            // You might be able to add it to line 305.
             if ((token == null && currentToken != null || !token.equals(currentToken)) && currentUser != null) {
                 updateDevice(currentUser.getUid(), token);
             }
