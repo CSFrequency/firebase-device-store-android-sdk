@@ -41,7 +41,11 @@ The structure of this Document is as follows:
 
 ```
 {
-  devices: Device[],
+  devices: {
+    deviceId1: Device,
+    deviceId2: Device,
+    ...
+  },
   userId: string,
 }
 ```
@@ -78,7 +82,7 @@ Indicate to the DeviceStore that the user is about to sign out, and the current 
 
 This can't be done automatically with `onAuthStateChanged` as the user is already signed out at this point. This means the Cloud Firestore security rules will prevent the database deletion as they no longer have the correct user permissions to remove the token.
 
-You should wait for the task to complete before signing the user out of your application to ensure that the device is correctly removed.
+You should wait for the task to complete before signing the user out of your application.  This will ensure that the device is correctly removed.
 
 #### `FirebaseDeviceStore.subscribe(): void`
 
