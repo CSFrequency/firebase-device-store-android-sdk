@@ -13,26 +13,30 @@ import android.support.v4.app.NotificationManagerCompat;
 import android.support.v4.content.LocalBroadcastManager;
 import android.util.Log;
 
+import com.google.android.gms.common.internal.Asserts;
+import com.google.android.gms.common.internal.Preconditions;
+import com.google.android.gms.tasks.Continuation;
 import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.Task;
+import com.google.android.gms.tasks.Tasks;
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.DocumentReference;
 import com.google.firebase.firestore.DocumentSnapshot;
+import com.google.firebase.firestore.FieldPath;
+import com.google.firebase.firestore.FieldValue;
 import com.google.firebase.firestore.FirebaseFirestore;
-import com.google.firebase.firestore.FirebaseFirestoreException;
-import com.google.firebase.firestore.Transaction;
+import com.google.firebase.firestore.util.Assert;
 import com.google.firebase.iid.FirebaseInstanceId;
 import com.google.firebase.iid.InstanceIdResult;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 public class FirebaseDeviceStore {
+    private static final String BLUETOOTH_PERMISSION = "android.permission.BLUETOOTH";
     private static final String DEFAULT_COLLECTION_PATH = "user-devices";
     private static final String DEVICE_ID_FIELD = "deviceId";
     private static final String DEVICES_FIELD = "devices";
@@ -68,13 +72,17 @@ public class FirebaseDeviceStore {
         LocalBroadcastManager.getInstance(context).registerReceiver(new TokenReceiver(), new IntentFilter(FDSMessagingService.NEW_TOKEN_INTENT));
     }
 
-    public void signOut() {
+    public Task<Void> signOut() {
         if (currentUser != null && currentToken != null) {
-            deleteDevice(currentUser.getUid());
+            // Store the UID before we clear the user
+            String uid = currentUser.getUid();
+            currentUser = null;
+            return deleteDevice(uid);
         }
 
         // Clear the cached user
         currentUser = null;
+        return Tasks.forResult(null);
     }
 
     public void subscribe() {
@@ -92,7 +100,7 @@ public class FirebaseDeviceStore {
 
         currentUser = auth.getCurrentUser();
 
-        // Load the current FCM token
+        // Load the current FCM token and update Firestore if there is a logged in user
         instanceId.getInstanceId().addOnCompleteListener(new OnCompleteListener<InstanceIdResult>() {
             @Override
             public void onComplete(@NonNull Task<InstanceIdResult> task) {
@@ -108,15 +116,18 @@ public class FirebaseDeviceStore {
             }
         });
 
+        // Listen to the auth state and update Firestore if there is a logged in user and FCM token
         authStateListener = new FirebaseAuth.AuthStateListener() {
             @Override
             public void onAuthStateChanged(@NonNull FirebaseAuth firebaseAuth) {
                 FirebaseUser authUser = firebaseAuth.getCurrentUser();
 
-                if (authUser != null && currentUser == null && currentToken != null) {
+                if (authUser != null && currentUser == null){
                     currentUser = authUser;
 
-                    updateDevice(currentUser.getUid(), currentToken);
+                    if (currentToken != null) {
+                        updateDevice(currentUser.getUid(), currentToken);
+                    }
                 } else if (authUser == null && currentUser != null) {
                     Log.w(TAG, "You need to call the `logout` method on the DeviceStore before logging out the user");
 
@@ -124,6 +135,7 @@ public class FirebaseDeviceStore {
                     currentUser = authUser;
                 }
 
+                assert currentUser == authUser;
             }
         };
 
@@ -142,70 +154,45 @@ public class FirebaseDeviceStore {
         subscribed = false;
     }
 
-    private void deleteDevice(final String userId) {
+    private Task<Void> deleteDevice(final String userId) {
         final DocumentReference docRef = userRef(userId);
 
-        firestore.runTransaction(new Transaction.Function<Void>() {
+        return docRef.get().continueWithTask(new Continuation<DocumentSnapshot, Task<Void>>() {
             @Override
-            public Void apply(Transaction transaction) throws FirebaseFirestoreException {
-                DocumentSnapshot doc = transaction.get(docRef);
-
-                if (doc.exists()) {
-                    List<Map<String, String>> devices = getDevices(doc);
-                    // Remove the old device
-                    devices = removeCurrentDevice(devices);
-                    // Update the document
-                    transaction.update(docRef, DEVICES_FIELD, devices);
-                } else {
-                    Map<String, Object> userDevices = createUserDevices(userId, null);
-                    transaction.set(docRef, userDevices);
-                }
-                return null;
-            }
-        });
-    }
-
-    private void updateDevice(final String userId, final String token) {
-        final DocumentReference docRef = userRef(userId);
-
-        firestore.runTransaction(new Transaction.Function<Void>() {
-            @Override
-            public Void apply(Transaction transaction) throws FirebaseFirestoreException {
-                DocumentSnapshot doc = transaction.get(docRef);
-
-                if (doc.exists()) {
-                    List<Map<String, String>> devices = getDevices(doc);
-                    if (containsCurrentDevice(devices)) {
-                        // Update the device token if it already exists
-                        updateCurrentDevice(devices, token);
-                    } else {
-                        // Add the device if it doesn't already exist
-                        devices.add(createCurrentDevice(token));
+            public Task<Void> then(@NonNull Task<DocumentSnapshot> task) throws Exception {
+                if (task.isSuccessful()) {
+                    if (task.getResult().exists()) {
+                        return docRef.update(FieldPath.of(DEVICES_FIELD, getDeviceId()), FieldValue.delete());
                     }
-                    // Update the document
-                    transaction.update(docRef, DEVICES_FIELD, devices);
-                } else {
-                    Map<String, Object> userDevices = createUserDevices(userId, token);
-                    transaction.set(docRef, userDevices);
+                    return Tasks.forResult(null);
                 }
-                return null;
+                return Tasks.forException(task.getException());
             }
         });
     }
 
-    private boolean containsCurrentDevice(List<Map<String, String>> devices) {
-        String deviceId = getDeviceId();
-        for (Map<String, String> device : devices) {
-            if (deviceId.equals(device.get(DEVICE_ID_FIELD))) {
-                return true;
+    private Task<Void> updateDevice(final String userId, final String token) {
+        final DocumentReference docRef = userRef(userId);
+
+        return docRef.get().continueWithTask(new Continuation<DocumentSnapshot, Task<Void>>() {
+            @Override
+            public Task<Void> then(@NonNull Task<DocumentSnapshot> task) throws Exception {
+                if (task.isSuccessful()) {
+                    if (task.getResult().exists()) {
+                        String deviceId = getDeviceId();
+                        return docRef.update(FieldPath.of(DEVICES_FIELD, deviceId), createDevice(deviceId, token));
+                    } else {
+                        return docRef.set(createUserDevices(userId, token));
+                    }
+                }
+                return Tasks.forException(task.getException());
             }
-        }
-        return false;
+        });
     }
 
-    private Map<String, String> createCurrentDevice(String token) {
+    private Map<String, String> createDevice(String deviceId, String token) {
         Map<String, String> device = new HashMap<>();
-        device.put(DEVICE_ID_FIELD, getDeviceId());
+        device.put(DEVICE_ID_FIELD, deviceId);
         device.put(FCM_TOKEN_FIELD, token);
         device.put(NAME_FIELD, getDeviceName());
         device.put(OS_FIELD, getOS());
@@ -216,7 +203,12 @@ public class FirebaseDeviceStore {
 
     private Map<String, Object> createUserDevices(String userId, String token) {
         Map<String, Object> userDevices = new HashMap<>();
-        userDevices.put(DEVICES_FIELD, token == null ? Arrays.asList() : Arrays.asList(createCurrentDevice(token)));
+        Map<String, Map<String, String>> devices = new HashMap<>();
+        if (token != null) {
+            String deviceId = getDeviceId();
+            devices.put(deviceId, createDevice(deviceId, token));
+        }
+        userDevices.put(DEVICES_FIELD, devices);
         userDevices.put(USER_ID_FIELD, userId);
 
         return userDevices;
@@ -226,17 +218,8 @@ public class FirebaseDeviceStore {
         return Settings.Secure.getString(context.getContentResolver(), Settings.Secure.ANDROID_ID);
     }
 
-    private List<Map<String, String>> getDevices(DocumentSnapshot snapshot) {
-        List<Map<String, String>> devices = (List<Map<String, String>>) snapshot.get(DEVICES_FIELD);
-        if (devices == null) {
-            return new ArrayList<>();
-        }
-        return devices;
-    }
-
     private String getDeviceName() {
-        String permission = "android.permission.BLUETOOTH";
-        int res = context.checkCallingOrSelfPermission(permission);
+        int res = context.checkCallingOrSelfPermission(BLUETOOTH_PERMISSION);
         if (res == PackageManager.PERMISSION_GRANTED) {
             try {
                 BluetoothAdapter myDevice = BluetoothAdapter.getDefaultAdapter();
@@ -254,27 +237,8 @@ public class FirebaseDeviceStore {
         return "Android " + Build.VERSION.RELEASE;
     }
 
-    private List<Map<String, String>> removeCurrentDevice(List<Map<String, String>> devices) {
-        String deviceId = getDeviceId();
-        List<Map<String, String>> filteredDevices = new ArrayList<>();
-        for (Map<String, String> device : devices) {
-            if (!deviceId.equals(device.get(DEVICE_ID_FIELD))) {
-                filteredDevices.add(device);
-            }
-        }
-        return filteredDevices;
-    }
-
-    private void updateCurrentDevice(List<Map<String, String>> devices, String token) {
-        String deviceId = getDeviceId();
-        for (Map<String, String> device : devices) {
-            if (deviceId.equals(device.get(DEVICE_ID_FIELD))) {
-                device.put(FCM_TOKEN_FIELD, token);
-            }
-        }
-    }
-
     private DocumentReference userRef(String userId) {
+        Preconditions.checkNotNull(userId);
         return firestore.collection(collectionPath).document(userId);
     }
 
@@ -287,12 +251,18 @@ public class FirebaseDeviceStore {
             }
 
             String token = intent.getStringExtra(FDSMessagingService.TOKEN_EXTRA);
-            // If the token has changed, then update it
-            if ((token == null && currentToken != null || !token.equals(currentToken)) && currentUser != null) {
-                updateDevice(currentUser.getUid(), token);
+
+            // If there's no current user, just update the cached token
+            if (currentUser == null) {
+                currentToken = token;
+                return;
             }
-            // Update the cached token
-            currentToken = token;
+
+            // If the token has changed, then update in Firestore and update the cached token
+            if ((token == null && currentToken != null || !token.equals(currentToken))) {
+                updateDevice(currentUser.getUid(), token);
+                currentToken = token;
+            }
         }
     }
 }

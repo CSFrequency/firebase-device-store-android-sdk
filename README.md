@@ -8,38 +8,20 @@ Automatically store Device and FCM Token information for Firebase Auth Users in 
 
 ## Installation
 
-Update the root level `build.gradle` with the CS Frequency Maven repository:
-
-> This will not be necessary once the library has been accepted into JCenter
-
-```
-allprojects {
-    repositories {
-        mavenLocal()
-        google()
-        jcenter()
-        // Add this section
-        maven {
-            url 'http://dl.bintray.com/csfrequency/maven'
-        }
-    }
-}
-```
-
 Add the following dependency to your `app/build.gradle`:
 
 ```
-implementation "com.csfrequency.firebase.devicestore:firebase-device-store:0.0.3"
+implementation "com.csfrequency.firebase.devicestore:firebase-device-store:0.1.0"
 ```
 
 ## Example usage
 
-```
-import com.csfrequency.firebase.devicestore.FirebaseDeviceStore;
+  ```
+  import com.csfrequency.firebase.devicestore.FirebaseDeviceStore;
 
-FirebaseDeviceStore deviceStore = new FirebaseDeviceStore(this.getApplicationContext(), FirebaseApp.getInstance(), "user-devices");
-deviceStore.subscribe();
-```
+  FirebaseDeviceStore deviceStore = new FirebaseDeviceStore(this.getApplicationContext(), FirebaseApp.getInstance(), "user-devices");
+  deviceStore.subscribe();
+  ```
 
 ## Documentation
 
@@ -68,17 +50,17 @@ A `Device` object contains the following:
 
 ```
 {
-  deviceId: string, // The browser name and version
+  deviceId: string, // A UUID for the device
   fcmToken: string, // The FCM token
-  name: 'Unknown',  // Web browser's do not provide a name field
+  name: string,     // The name of the device (e.g. 'Bob's Google Pixel')
   os: string,       // The OS of the device
-  type: 'Web'
+  type: 'Android'
 }
 ```
 
 ### API
 
-#### `FirebaseDeviceStore(context, app, collectionPath)`
+#### `FirebaseDeviceStore(context: Context, app: FirebaseApp, collectionPath: string)`
 
 Create a new DeviceStore.
 
@@ -90,11 +72,13 @@ Parameters:
 
 Returns a `FirebaseDeviceStore`.
 
-#### `FirebaseDeviceStore.signOut(): void`
+#### `FirebaseDeviceStore.signOut(): Task<Void>`
 
 Indicate to the DeviceStore that the user is about to sign out, and the current device token should be removed.
 
-This cannot be done automatically with `onAuthStateChanged` as the user won't have permission to remove the token from Firestore as they are already signed out by this point and the Cloud Firestore security rules will prevent the database deletion.
+This can't be done automatically with `onAuthStateChanged` as the user is already signed out at this point. This means the Cloud Firestore security rules will prevent the database deletion as they no longer have the correct user permissions to remove the token.
+
+You should wait for the task to complete before signing the user out of your application to ensure that the device is correctly removed.
 
 #### `FirebaseDeviceStore.subscribe(): void`
 
