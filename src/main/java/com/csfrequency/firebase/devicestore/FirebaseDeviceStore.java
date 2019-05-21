@@ -157,14 +157,7 @@ public class FirebaseDeviceStore {
 
     private Task<Void> deleteDevice(final String userId) {
         final DocumentReference docRef = userRef(userId);
-
-        Map<String, Object> deviceDelete = new HashMap<>();
-        deviceDelete.put(getDeviceId(), FieldValue.delete());
-
-        Map<String, Object> updates = new HashMap<>();
-        updates.put(DEVICES_FIELD, deviceDelete);
-
-        return docRef.set(updates, SetOptions.merge());
+        return docRef.update(FieldPath.of(DEVICES_FIELD, getDeviceId()), FieldValue.delete());
     }
 
     private Task<Void> updateDevice(final String userId, final String token) {
