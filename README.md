@@ -11,7 +11,7 @@ Automatically store Device and FCM Token information for Firebase Auth Users in 
 Add the following dependency to your `app/build.gradle`:
 
 ```
-implementation "com.csfrequency.firebase.devicestore:firebase-device-store:0.1.0"
+implementation "com.csfrequency.firebase.devicestore:firebase-device-store:0.1.1"
 ```
 
 ## Example usage

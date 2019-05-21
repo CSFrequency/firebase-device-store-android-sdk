@@ -27,6 +27,7 @@ import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FieldPath;
 import com.google.firebase.firestore.FieldValue;
 import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.SetOptions;
 import com.google.firebase.firestore.util.Assert;
 import com.google.firebase.iid.FirebaseInstanceId;
 import com.google.firebase.iid.InstanceIdResult;
@@ -157,37 +158,18 @@ public class FirebaseDeviceStore {
     private Task<Void> deleteDevice(final String userId) {
         final DocumentReference docRef = userRef(userId);
 
-        return docRef.get().continueWithTask(new Continuation<DocumentSnapshot, Task<Void>>() {
-            @Override
-            public Task<Void> then(@NonNull Task<DocumentSnapshot> task) throws Exception {
-                if (task.isSuccessful()) {
-                    if (task.getResult().exists()) {
-                        return docRef.update(FieldPath.of(DEVICES_FIELD, getDeviceId()), FieldValue.delete());
-                    }
-                    return Tasks.forResult(null);
-                }
-                return Tasks.forException(task.getException());
-            }
-        });
+        Map<String, Object> deviceDelete = new HashMap<>();
+        deviceDelete.put(getDeviceId(), FieldValue.delete());
+
+        Map<String, Object> updates = new HashMap<>();
+        updates.put(DEVICES_FIELD, deviceDelete);
+
+        return docRef.set(updates, SetOptions.merge());
     }
 
     private Task<Void> updateDevice(final String userId, final String token) {
         final DocumentReference docRef = userRef(userId);
-
-        return docRef.get().continueWithTask(new Continuation<DocumentSnapshot, Task<Void>>() {
-            @Override
-            public Task<Void> then(@NonNull Task<DocumentSnapshot> task) throws Exception {
-                if (task.isSuccessful()) {
-                    if (task.getResult().exists()) {
-                        String deviceId = getDeviceId();
-                        return docRef.update(FieldPath.of(DEVICES_FIELD, deviceId), createDevice(deviceId, token));
-                    } else {
-                        return docRef.set(createUserDevices(userId, token));
-                    }
-                }
-                return Tasks.forException(task.getException());
-            }
-        });
+        return docRef.set(createUserDevices(userId, token), SetOptions.merge());
     }
 
     private Map<String, String> createDevice(String deviceId, String token) {
@@ -202,12 +184,11 @@ public class FirebaseDeviceStore {
     }
 
     private Map<String, Object> createUserDevices(String userId, String token) {
-        Map<String, Object> userDevices = new HashMap<>();
         Map<String, Map<String, String>> devices = new HashMap<>();
-        if (token != null) {
-            String deviceId = getDeviceId();
-            devices.put(deviceId, createDevice(deviceId, token));
-        }
+        String deviceId = getDeviceId();
+        devices.put(deviceId, createDevice(deviceId, token));
+
+        Map<String, Object> userDevices = new HashMap<>();
         userDevices.put(DEVICES_FIELD, devices);
         userDevices.put(USER_ID_FIELD, userId);
 
