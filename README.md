@@ -78,7 +78,7 @@ Returns a `FirebaseDeviceStore`.
 
 #### `FirebaseDeviceStore.signOut(): Task<Void>`
 
-Indicate to the DeviceStore that the user is about to sign out, and the current device token should be removed.
+Indicate to the DeviceStore that the user is about to sign out and that the current device token should be removed.
 
 This can't be done automatically with `onAuthStateChanged` as the user is already signed out at this point. This means the Cloud Firestore security rules will prevent the database deletion as they no longer have the correct user permissions to remove the token.
 
