@@ -1,16 +1,21 @@
 apply plugin: 'com.android.library'
 apply plugin: 'com.github.dcendents.android-maven'
 apply plugin: 'com.jfrog.bintray'
+apply plugin: 'com.github.sherter.google-java-format'
 
 buildscript {
     repositories {
         google()
         jcenter()
+        maven {
+            url "https://plugins.gradle.org/m2/"
+        }
     }
     dependencies {
         classpath 'com.android.tools.build:gradle:3.4.0'
         classpath 'com.github.dcendents:android-maven-gradle-plugin:2.1'
         classpath 'com.jfrog.bintray.gradle:gradle-bintray-plugin:1.8.4'
+        classpath 'gradle.plugin.com.github.sherter.google-java-format:google-java-format-gradle-plugin:0.8'
     }
 }
 
@@ -37,7 +42,6 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
-
 }
 
 dependencies {
@@ -60,7 +64,7 @@ ext {
 }
 
 group = publishedGroupId
-version = '0.0.3'
+version = '0.1.2'
 
 install {
     repositories.mavenInstaller {
@@ -129,4 +133,18 @@ bintray {
             desc = libraryDescription
         }
     }
+}
+
+googleJavaFormat {
+    toolVersion = '1.6'
+}
+tasks.googleJavaFormat {
+    source '.'
+    include '**/*.java'
+    exclude '**/generated/**'
+}
+tasks.verifyGoogleJavaFormat {
+    source '.'
+    include '**/*.java'
+    exclude '**/generated/**'
 }
