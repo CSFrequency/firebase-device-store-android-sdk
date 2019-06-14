@@ -89,7 +89,7 @@ You should wait for the task to complete before signing the user out of your app
 Subscribe a device store to the Firebase App. This will:
 
 1. Subscribe to Firebase Auth and listen to changes in authentication state
-2. Subscribe to Firebase Messaging and listen to changes in the FCM token
+2. Subscribe to Firebase Cloud Messaging and listen to changes in the FCM token
 3. Automatically store device and FCM token information in the Cloud Firestore collection you specify
 
 #### `FirebaseDeviceStore.unsubscribe(): void`
