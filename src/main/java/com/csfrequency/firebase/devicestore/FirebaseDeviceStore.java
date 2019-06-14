@@ -52,6 +52,10 @@ public class FirebaseDeviceStore {
   private FirebaseUser currentUser = null;
   private boolean subscribed = false;
 
+  public FirebaseDeviceStore(Context context) {
+    this(context, FirebaseApp.getInstance(), DEFAULT_COLLECTION_PATH);
+  }
+
   public FirebaseDeviceStore(Context context, FirebaseApp app) {
     this(context, app, DEFAULT_COLLECTION_PATH);
   }
